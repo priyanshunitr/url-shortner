@@ -1,0 +1,24 @@
+# Environment files
+.env
+.env.test
+
+# Temporary files
+tmp/
+.air/
+
+# Binaries
+*.exe
+*.out
+*.test
+url
+
+# Build output
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
