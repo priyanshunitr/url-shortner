@@ -42,6 +42,13 @@ func handleServiceError(c *gin.Context, err error) {
 }
 
 // GetAnalyticsOverview godoc
+// @Summary Get an owned URL's sampled visit overview
+// @Tags legacy analytics
+// @Produce json
+// @Security Bearer
+// @Param id path int true "URL ID (base, premium or admin role required)"
+// @Success 200 {object} models.AnalyticsOverview
+// @Router /api/v1/analytics/{id}/overview [get]
 func (ac *AnalyticsController) GetAnalyticsOverview(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -62,6 +69,13 @@ func (ac *AnalyticsController) GetAnalyticsOverview(c *gin.Context) {
 }
 
 // GetDailyClicks godoc
+// @Summary Get daily sampled visit counts in UTC
+// @Tags legacy analytics
+// @Produce json
+// @Security Bearer
+// @Param id path int true "Owned URL ID"
+// @Success 200 {array} models.DailyClick
+// @Router /api/v1/analytics/{id}/daily [get]
 func (ac *AnalyticsController) GetDailyClicks(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -82,6 +96,13 @@ func (ac *AnalyticsController) GetDailyClicks(c *gin.Context) {
 }
 
 // GetRecentVisits godoc
+// @Summary Get recent sampled visits
+// @Tags legacy analytics
+// @Produce json
+// @Security Bearer
+// @Param id path int true "Owned URL ID"
+// @Success 200 {array} models.RecentVisit
+// @Router /api/v1/analytics/{id}/recent [get]
 func (ac *AnalyticsController) GetRecentVisits(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -102,6 +123,13 @@ func (ac *AnalyticsController) GetRecentVisits(c *gin.Context) {
 }
 
 // GetBrowserAnalytics godoc
+// @Summary Get sampled visit counts by browser
+// @Tags legacy analytics
+// @Produce json
+// @Security Bearer
+// @Param id path int true "Owned URL ID"
+// @Success 200 {array} models.BrowserAnalytics
+// @Router /api/v1/analytics/{id}/browser [get]
 func (ac *AnalyticsController) GetBrowserAnalytics(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -122,6 +150,13 @@ func (ac *AnalyticsController) GetBrowserAnalytics(c *gin.Context) {
 }
 
 // GetDeviceAnalytics godoc
+// @Summary Get sampled visit counts by device
+// @Tags legacy analytics
+// @Produce json
+// @Security Bearer
+// @Param id path int true "Owned URL ID"
+// @Success 200 {array} models.DeviceAnalytics
+// @Router /api/v1/analytics/{id}/device [get]
 func (ac *AnalyticsController) GetDeviceAnalytics(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)

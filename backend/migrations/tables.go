@@ -12,11 +12,12 @@ package migrations
 // (
 //     id BIGSERIAL PRIMARY KEY,
 //     user_id BIGINT REFERENCES users(id),
-//     long_url TEXT,
-//     short_url TEXT,
-//     expiry TIMESTAMP,
-//     clicks BIGINT,
-//     created_at TIMESTAMP
+//     original_url TEXT NOT NULL,
+//     short_code VARCHAR(16) UNIQUE NOT NULL,
+//     expires_at TIMESTAMPTZ,
+//     click_count BIGINT NOT NULL DEFAULT 0,
+//     created_at TIMESTAMPTZ,
+//     last_accessed TIMESTAMPTZ
 // )
 
 // click_events

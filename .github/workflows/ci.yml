@@ -73,23 +73,6 @@ jobs:
       - name: Verify Go modules
         run: go mod verify
 
-      - name: Create test environment file
-        run: |
-          cat <<EOF > .env.test
-          DB_SERVER_URL=postgres://urluser:yourpassword@127.0.0.1:5432/url_shortener_test?sslmode=disable
-
-          DB_MAX_CONNECTIONS=20
-          DB_MAX_IDLE_CONNECTIONS=5
-          DB_MAX_LIFETIME_CONNECTIONS=2
-
-          REDIS_ADDR=127.0.0.1:6379
-          REDIS_PASSWORD=
-          REDIS_DB=1
-
-          PORT=8080
-          GIN_MODE=test
-          EOF
-
       - name: Run formatter check
         run: |
           files=$(gofmt -l .)

@@ -42,6 +42,14 @@ func parsePagination(c *gin.Context) (int, int) {
 }
 
 // GetAllUsers godoc
+// @Summary List users as an administrator
+// @Tags admin
+// @Produce json
+// @Security Bearer
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(50)
+// @Success 200 {object} models.PaginatedUserResponse
+// @Router /api/v1/admin/users [get]
 func (ac *AdminController) GetAllUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit, offset := parsePagination(c)
@@ -69,6 +77,15 @@ func (ac *AdminController) GetAllUsers(c *gin.Context) {
 }
 
 // GetUserURLsAsAdmin godoc
+// @Summary List a user's URLs as an administrator
+// @Tags admin
+// @Produce json
+// @Security Bearer
+// @Param userid path int true "User ID"
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(50)
+// @Success 200 {object} models.PaginatedURLResponse
+// @Router /api/v1/admin/users/{userid}/urls [get]
 func (ac *AdminController) GetUserURLsAsAdmin(c *gin.Context) {
 	ctx := c.Request.Context()
 

@@ -37,7 +37,7 @@ type LoginRequest struct {
 
 // Register godoc
 // @Summary      Register a new user
-// @Description  Create a new user account and return a JWT token
+// @Description  Create a new user account; login separately for an access token
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -45,7 +45,7 @@ type LoginRequest struct {
 // @Success      201  {object}  models.AuthRegisterSuccess
 // @Failure      400  {object}  models.HTTPError
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/register [post]
+// @Router       /api/v1/auth/register [post]
 func (auc *AuthController) Register(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req RegisterRequest
@@ -90,7 +90,7 @@ func (auc *AuthController) Register(c *gin.Context) {
 // @Failure      400  {object}  models.HTTPError
 // @Failure      401  {object}  models.HTTPError
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/login [post]
+// @Router       /api/v1/auth/login [post]
 func (auc *AuthController) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req LoginRequest
@@ -143,7 +143,7 @@ func (auc *AuthController) Login(c *gin.Context) {
 // @Security     Bearer
 // @Success      200  {object}  models.MessageSuccess
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/logout [post]
+// @Router       /api/v1/auth/logout [post]
 func (auc *AuthController) Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	tokenString := authHeader[len("Bearer "):]
@@ -182,7 +182,7 @@ func (auc *AuthController) Logout(c *gin.Context) {
 // @Security     Bearer
 // @Success      200  {object}  models.User
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/me [get]
+// @Router       /api/v1/auth/me [get]
 func (auc *AuthController) Me(
 	c *gin.Context,
 ) {
@@ -213,7 +213,7 @@ func (auc *AuthController) Me(
 // @Security     Bearer
 // @Success      200  {object}  models.MessageSuccess
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/me [delete]
+// Account deletion is not registered as an HTTP route.
 func (auc *AuthController) DeleteAccount(c *gin.Context) {
 	userID := c.MustGet("userID").(int64)
 
@@ -230,6 +230,14 @@ func (auc *AuthController) DeleteAccount(c *gin.Context) {
 	})
 }
 
+// RefreshToken godoc
+// @Summary Rotate a refresh token and issue a new access token
+// @Tags auth
+// @Produce json
+// @Param Cookie header string true "refresh_token cookie from login or registration"
+// @Success 200 {object} models.AuthLoginSuccess
+// @Failure 401 {object} models.HTTPError
+// @Router /api/v1/auth/refresh [post]
 func (auc *AuthController) RefreshToken(c *gin.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
@@ -277,7 +285,7 @@ func (auc *AuthController) RefreshToken(c *gin.Context) {
 // @Security     Bearer
 // @Success      200  {object}  models.SessionListResponse
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/sessions [get]
+// @Router       /api/v1/auth/sessions [get]
 func (auc *AuthController) GetSessions(c *gin.Context) {
 	userID := c.MustGet("userID").(int64)
 	sessionID := c.MustGet("sessionID").(int64)
@@ -313,7 +321,7 @@ func (auc *AuthController) GetSessions(c *gin.Context) {
 // @Success      200  {object}  models.MessageSuccess
 // @Failure      400  {object}  models.HTTPError
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/sessions/{id} [delete]
+// @Router       /api/v1/auth/sessions/{id} [delete]
 func (auc *AuthController) RevokeSession(c *gin.Context) {
 	userID := c.MustGet("userID").(int64)
 
@@ -342,7 +350,7 @@ func (auc *AuthController) RevokeSession(c *gin.Context) {
 // @Success      200  {object}  models.MessageSuccess
 // @Failure      400  {object}  models.HTTPError
 // @Failure      500  {object}  models.HTTPError
-// @Router       /auth/sessions/others [delete]
+// @Router       /api/v1/auth/sessions/others [delete]
 func (auc *AuthController) RevokeAllOtherSessions(c *gin.Context) {
 	userID := c.MustGet("userID").(int64)
 	currentSessionID := c.MustGet("sessionID").(int64)

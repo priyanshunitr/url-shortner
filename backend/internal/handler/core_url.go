@@ -24,6 +24,7 @@ type CreateURLRequest struct {
 // @Success 201 {object} models.CoreURLResponse
 // @Failure 400 {object} models.HTTPError
 // @Failure 429 {object} models.HTTPError
+// @Failure 503 {object} models.HTTPError
 // @Router /api/urls [post]
 func (uc *URLController) CreatePublicURL(c *gin.Context) {
 	var req CreateURLRequest
@@ -50,6 +51,8 @@ func (uc *URLController) CreatePublicURL(c *gin.Context) {
 // @Param code path string true "Short code"
 // @Success 200 {object} models.URLStats
 // @Failure 404 {object} models.HTTPError
+// @Failure 429 {object} models.HTTPError
+// @Failure 503 {object} models.HTTPError
 // @Router /api/urls/{code}/stats [get]
 func (uc *URLController) GetPublicStats(c *gin.Context) {
 	stats, err := uc.Service.GetPublicStats(c.Request.Context(), c.Param("code"))

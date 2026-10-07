@@ -35,7 +35,16 @@ func NewURLController(s *services.URLService, rdb *redis.Client) *URLController 
 }
 
 // ShortenURL godoc
-// ... (swagger docs omitted for brevity)
+// @Summary Create an authenticated short URL
+// @Tags legacy URLs
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param request body Request true "URL and optional premium custom code; expiry is currently ignored"
+// @Success 201 {object} models.URLShortenSuccess
+// @Failure 400 {object} models.HTTPError
+// @Failure 403 {object} models.HTTPError
+// @Router /api/v1/shorten [post]
 func (uc *URLController) ShortenURL(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -72,7 +81,16 @@ func (uc *URLController) ShortenURL(c *gin.Context) {
 }
 
 // RedirectURL godoc
-// ...
+// @Summary Redirect to the original URL
+// @Tags urls
+// @Param shortCode path string true "Short code"
+// @Success 302 {string} string "Location header contains the original URL"
+// @Failure 404 {object} models.HTTPResponseErr
+// @Failure 410 {object} models.HTTPResponseErr
+// @Failure 429 {object} models.HTTPError
+// @Failure 503 {object} models.HTTPError
+// @Router /{shortCode} [get]
+// @Router /api/v1/{shortCode} [get]
 func (uc *URLController) RedirectURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	code := c.Param("shortCode")
@@ -98,7 +116,14 @@ func (uc *URLController) RedirectURL(c *gin.Context) {
 }
 
 // GetUserURLs godoc
-// ...
+// @Summary List the current user's short URLs
+// @Tags legacy URLs
+// @Produce json
+// @Security Bearer
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(50)
+// @Success 200 {object} models.PaginatedURLResponse
+// @Router /api/v1/urls [get]
 func (uc *URLController) GetUserURLs(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -145,6 +170,15 @@ type UpdateURLRequest struct {
 }
 
 // UpdateUserURL godoc
+// @Summary Update an owned URL and invalidate its cache
+// @Tags legacy URLs
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "URL ID"
+// @Param request body UpdateURLRequest true "New destination"
+// @Success 200 {object} models.MessageSuccess
+// @Router /api/v1/urls/{id} [put]
 func (uc *URLController) UpdateUserURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -178,6 +212,13 @@ func (uc *URLController) UpdateUserURL(c *gin.Context) {
 }
 
 // DeleteUserURL godoc
+// @Summary Delete an owned URL and invalidate its cache
+// @Tags legacy URLs
+// @Produce json
+// @Security Bearer
+// @Param id path int true "URL ID"
+// @Success 200 {object} models.MessageSuccess
+// @Router /api/v1/urls/{id} [delete]
 func (uc *URLController) DeleteUserURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)
@@ -202,6 +243,14 @@ type BulkDeleteRequest struct {
 }
 
 // BulkDeleteUserURLs godoc
+// @Summary Delete owned URLs in a batch
+// @Tags legacy URLs
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param request body BulkDeleteRequest true "URL IDs"
+// @Success 200 {object} models.MessageSuccess
+// @Router /api/v1/urls/bulk [delete]
 func (uc *URLController) BulkDeleteUserURLs(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.MustGet("userID").(int64)

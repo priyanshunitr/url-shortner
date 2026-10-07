@@ -1,5 +1,24 @@
-basePath: /api/v1
+basePath: /
 definitions:
+  controllers.BulkDeleteRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        minItems: 1
+        type: array
+    required:
+    - ids
+    type: object
+  controllers.CreateURLRequest:
+    properties:
+      expires_at:
+        type: string
+      url:
+        type: string
+    required:
+    - url
+    type: object
   controllers.LoginRequest:
     properties:
       email:
@@ -21,6 +40,35 @@ definitions:
     - email
     - password
     type: object
+  controllers.Request:
+    properties:
+      custom_code:
+        type: string
+      expiry:
+        type: string
+      long_url:
+        type: string
+    required:
+    - long_url
+    type: object
+  controllers.UpdateURLRequest:
+    properties:
+      long_url:
+        type: string
+    required:
+    - long_url
+    type: object
+  models.AnalyticsOverview:
+    properties:
+      this_month:
+        type: integer
+      this_week:
+        type: integer
+      today:
+        type: integer
+      total_clicks:
+        type: integer
+    type: object
   models.AuthLoginSuccess:
     properties:
       message:
@@ -36,16 +84,103 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
     type: object
+  models.BrowserAnalytics:
+    properties:
+      browser:
+        type: string
+      count:
+        type: integer
+    type: object
+  models.CoreURLResponse:
+    properties:
+      short_code:
+        type: string
+      short_url:
+        type: string
+    type: object
+  models.DailyClick:
+    properties:
+      clicks:
+        type: integer
+      date:
+        type: string
+    type: object
+  models.DeviceAnalytics:
+    properties:
+      count:
+        type: integer
+      device:
+        type: string
+    type: object
   models.HTTPError:
     properties:
       error:
         example: invalid credentials
         type: string
     type: object
+  models.HTTPResponseErr:
+    properties:
+      err:
+        example: not found
+        type: string
+    type: object
   models.MessageSuccess:
     properties:
       message:
         example: operation successful
+        type: string
+    type: object
+  models.PaginatedURLResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.URL'
+        type: array
+      meta:
+        $ref: '#/definitions/models.PaginationMeta'
+    type: object
+  models.PaginatedUserResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.User'
+        type: array
+      meta:
+        $ref: '#/definitions/models.PaginationMeta'
+    type: object
+  models.PaginationMeta:
+    properties:
+      limit:
+        example: 50
+        type: integer
+      page:
+        example: 1
+        type: integer
+      total:
+        example: 150
+        type: integer
+      total_pages:
+        example: 3
+        type: integer
+    type: object
+  models.RecentVisit:
+    properties:
+      browser:
+        type: string
+      created_at:
+        type: string
+      device:
+        type: string
+      ip_address:
+        type: string
+      referer:
+        type: string
+    type: object
+  models.Referrer:
+    properties:
+      clicks:
+        type: integer
+      source:
         type: string
     type: object
   models.Session:
@@ -72,6 +207,50 @@ definitions:
           $ref: '#/definitions/models.Session'
         type: array
     type: object
+  models.URL:
+    properties:
+      clicks:
+        type: integer
+      created_at:
+        type: string
+      expiry:
+        type: string
+      id:
+        description: go for uuid later
+        type: integer
+      long_url:
+        type: string
+      short_url:
+        type: string
+      user_id:
+        type: integer
+    required:
+    - long_url
+    - short_url
+    type: object
+  models.URLShortenSuccess:
+    properties:
+      success:
+        example: url inserted to db
+        type: string
+    type: object
+  models.URLStats:
+    properties:
+      clicks:
+        type: integer
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      last_accessed:
+        type: string
+      short_code:
+        type: string
+      top_referrers:
+        items:
+          $ref: '#/definitions/models.Referrer'
+        type: array
+    type: object
   models.User:
     properties:
       created_at:
@@ -86,11 +265,303 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: High performance URL shortener API with cache-aside caching and analytics.
+  description: URL shortener with Redis caching, sliding-window limits, buffered analytics
+    and Prometheus metrics.
   title: URL Shortener
-  version: "0.67"
+  version: "1.0"
 paths:
-  /auth/login:
+  /{shortCode}:
+    get:
+      parameters:
+      - description: Short code
+        in: path
+        name: shortCode
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Location header contains the original URL
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.HTTPResponseErr'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/models.HTTPResponseErr'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      summary: Redirect to the original URL
+      tags:
+      - urls
+  /api/urls:
+    post:
+      consumes:
+      - application/json
+      description: Creates an anonymous URL; optional expires_at must be in the future.
+      parameters:
+      - description: URL to shorten
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.CreateURLRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.CoreURLResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      summary: Create a short URL
+      tags:
+      - urls
+  /api/urls/{code}/stats:
+    get:
+      parameters:
+      - description: Short code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.URLStats'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      summary: Get statistics for a public short URL
+      tags:
+      - urls
+  /api/v1/{shortCode}:
+    get:
+      parameters:
+      - description: Short code
+        in: path
+        name: shortCode
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Location header contains the original URL
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.HTTPResponseErr'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/models.HTTPResponseErr'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      summary: Redirect to the original URL
+      tags:
+      - urls
+  /api/v1/admin/users:
+    get:
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginatedUserResponse'
+      security:
+      - Bearer: []
+      summary: List users as an administrator
+      tags:
+      - admin
+  /api/v1/admin/users/{userid}/urls:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: userid
+        required: true
+        type: integer
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginatedURLResponse'
+      security:
+      - Bearer: []
+      summary: List a user's URLs as an administrator
+      tags:
+      - admin
+  /api/v1/analytics/{id}/browser:
+    get:
+      parameters:
+      - description: Owned URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.BrowserAnalytics'
+            type: array
+      security:
+      - Bearer: []
+      summary: Get sampled visit counts by browser
+      tags:
+      - legacy analytics
+  /api/v1/analytics/{id}/daily:
+    get:
+      parameters:
+      - description: Owned URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.DailyClick'
+            type: array
+      security:
+      - Bearer: []
+      summary: Get daily sampled visit counts in UTC
+      tags:
+      - legacy analytics
+  /api/v1/analytics/{id}/device:
+    get:
+      parameters:
+      - description: Owned URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.DeviceAnalytics'
+            type: array
+      security:
+      - Bearer: []
+      summary: Get sampled visit counts by device
+      tags:
+      - legacy analytics
+  /api/v1/analytics/{id}/overview:
+    get:
+      parameters:
+      - description: URL ID (base, premium or admin role required)
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AnalyticsOverview'
+      security:
+      - Bearer: []
+      summary: Get an owned URL's sampled visit overview
+      tags:
+      - legacy analytics
+  /api/v1/analytics/{id}/recent:
+    get:
+      parameters:
+      - description: Owned URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.RecentVisit'
+            type: array
+      security:
+      - Bearer: []
+      summary: Get recent sampled visits
+      tags:
+      - legacy analytics
+  /api/v1/auth/login:
     post:
       consumes:
       - application/json
@@ -124,7 +595,7 @@ paths:
       summary: Login user
       tags:
       - auth
-  /auth/logout:
+  /api/v1/auth/logout:
     post:
       description: Invalidate the user's JWT token
       produces:
@@ -143,26 +614,7 @@ paths:
       summary: Logout user
       tags:
       - auth
-  /auth/me:
-    delete:
-      description: Completely delete the user's account and all associated URLs and
-        analytics
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.MessageSuccess'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/models.HTTPError'
-      security:
-      - Bearer: []
-      summary: Delete user account
-      tags:
-      - auth
+  /api/v1/auth/me:
     get:
       description: Get current authenticated user info
       produces:
@@ -181,11 +633,33 @@ paths:
       summary: Get current user info
       tags:
       - auth
-  /auth/register:
+  /api/v1/auth/refresh:
+    post:
+      parameters:
+      - description: refresh_token cookie from login or registration
+        in: header
+        name: Cookie
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuthLoginSuccess'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      summary: Rotate a refresh token and issue a new access token
+      tags:
+      - auth
+  /api/v1/auth/register:
     post:
       consumes:
       - application/json
-      description: Create a new user account and return a JWT token
+      description: Create a new user account; login separately for an access token
       parameters:
       - description: Registration Info
         in: body
@@ -211,7 +685,7 @@ paths:
       summary: Register a new user
       tags:
       - auth
-  /auth/sessions:
+  /api/v1/auth/sessions:
     get:
       description: Get all active refresh token sessions for the current user
       produces:
@@ -230,7 +704,7 @@ paths:
       summary: Get active sessions
       tags:
       - auth
-  /auth/sessions/{id}:
+  /api/v1/auth/sessions/{id}:
     delete:
       description: Revokes a specific refresh token session for the current user
       parameters:
@@ -259,7 +733,7 @@ paths:
       summary: Revoke a session
       tags:
       - auth
-  /auth/sessions/others:
+  /api/v1/auth/sessions/others:
     delete:
       description: Revokes all refresh token sessions for the current user except
         the one making this request
@@ -283,6 +757,132 @@ paths:
       summary: Revoke all other sessions
       tags:
       - auth
+  /api/v1/shorten:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: URL and optional premium custom code; expiry is currently ignored
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.URLShortenSuccess'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.HTTPError'
+      security:
+      - Bearer: []
+      summary: Create an authenticated short URL
+      tags:
+      - legacy URLs
+  /api/v1/urls:
+    get:
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginatedURLResponse'
+      security:
+      - Bearer: []
+      summary: List the current user's short URLs
+      tags:
+      - legacy URLs
+  /api/v1/urls/{id}:
+    delete:
+      parameters:
+      - description: URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageSuccess'
+      security:
+      - Bearer: []
+      summary: Delete an owned URL and invalidate its cache
+      tags:
+      - legacy URLs
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: URL ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: New destination
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.UpdateURLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageSuccess'
+      security:
+      - Bearer: []
+      summary: Update an owned URL and invalidate its cache
+      tags:
+      - legacy URLs
+  /api/v1/urls/bulk:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: URL IDs
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.BulkDeleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageSuccess'
+      security:
+      - Bearer: []
+      summary: Delete owned URLs in a batch
+      tags:
+      - legacy URLs
 securityDefinitions:
   Bearer:
     in: header
