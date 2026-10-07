@@ -12,6 +12,7 @@ import (
 	"github.com/gottatouchsomegrass/url/internal/config"
 	"github.com/gottatouchsomegrass/url/internal/database"
 	"github.com/gottatouchsomegrass/url/internal/handler"
+	"github.com/gottatouchsomegrass/url/internal/metrics"
 	"github.com/gottatouchsomegrass/url/internal/middleware"
 	"github.com/gottatouchsomegrass/url/internal/routes"
 	"github.com/gottatouchsomegrass/url/internal/service"
@@ -36,6 +37,9 @@ func main() {
 	_ = godotenv.Load()
 
 	r := gin.Default()
+	stats := metrics.New()
+	r.Use(stats.Middleware())
+	r.GET("/metrics", gin.WrapH(stats.Handler()))
 	if err := r.SetTrustedProxies(nil); err != nil {
 		log.Fatal(err)
 	}
@@ -61,9 +65,10 @@ func main() {
 	// )
 
 	urlService := services.NewURLService(dbq.URLQuery, cache.NewRedisURLCache(dbq.Redis, time.Hour))
+	urlService.Metrics = stats
 	buffer := &cache.RedisAnalytics{Client: dbq.Redis}
 	urlService.Recorder = buffer
-	worker := &services.AnalyticsWorker{Buffer: buffer, Repo: dbq.URLQuery, Interval: 5 * time.Second}
+	worker := &services.AnalyticsWorker{Buffer: buffer, Repo: dbq.URLQuery, Interval: 5 * time.Second, Metrics: stats}
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	workerDone := make(chan struct{})
 	go func() { defer close(workerDone); worker.Run(workerCtx) }()

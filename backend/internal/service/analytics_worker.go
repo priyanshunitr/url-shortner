@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gottatouchsomegrass/url/internal/metrics"
 	"github.com/gottatouchsomegrass/url/internal/model"
 	"github.com/jackc/pgx/v5"
 )
@@ -27,10 +28,16 @@ type AnalyticsWorker struct {
 	Buffer   AnalyticsBuffer
 	Repo     BatchRepository
 	Interval time.Duration
+	Metrics  *metrics.Metrics
 	mu       sync.Mutex
 }
 
-func (w *AnalyticsWorker) Flush(ctx context.Context) error {
+func (w *AnalyticsWorker) Flush(ctx context.Context) (result error) {
+	defer func() {
+		if result != nil && w.Metrics != nil {
+			w.Metrics.FlushErrors.Inc()
+		}
+	}()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err := w.Buffer.Seal(ctx); err != nil {
@@ -40,10 +47,16 @@ func (w *AnalyticsWorker) Flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if w.Metrics != nil {
+		w.Metrics.PendingBatches.Set(float64(len(keys)))
+	}
 	var failures error
 	for _, key := range keys {
 		if err := w.persist(ctx, key); err != nil {
 			failures = errors.Join(failures, err)
+		} else if w.Metrics != nil {
+			w.Metrics.FlushedBatches.Inc()
+			w.Metrics.PendingBatches.Dec()
 		}
 	}
 	return failures

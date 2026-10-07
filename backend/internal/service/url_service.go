@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gottatouchsomegrass/url/internal/cache"
+	"github.com/gottatouchsomegrass/url/internal/metrics"
 	"github.com/gottatouchsomegrass/url/internal/model"
 	"github.com/gottatouchsomegrass/url/internal/utils"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,6 +21,7 @@ type URLService struct {
 	Cache    cache.URLCache
 	BaseURL  string
 	Recorder ClickRecorder
+	Metrics  *metrics.Metrics
 }
 
 type ClickRecorder interface {
@@ -117,9 +119,19 @@ func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent,
 		lookup, err = s.Cache.Get(ctx, code)
 		if err != nil {
 			log.Printf("URL cache read failed: %v", err)
+			if s.Metrics != nil {
+				s.Metrics.CacheErrors.Inc()
+			}
 		}
 	}
 	url := lookup.URL
+	if s.Metrics != nil {
+		if url != nil {
+			s.Metrics.CacheHits.Inc()
+		} else {
+			s.Metrics.CacheMisses.Inc()
+		}
+	}
 	if url == nil {
 		var err error
 		url, err = s.Repo.GetByShortURL(ctx, code)
@@ -132,6 +144,9 @@ func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent,
 		if s.Cache != nil && lookup.Version != "" {
 			if err := s.Cache.Set(ctx, url, lookup.Version); err != nil {
 				log.Printf("URL cache fill failed: %v", err)
+				if s.Metrics != nil {
+					s.Metrics.CacheErrors.Inc()
+				}
 			}
 		}
 	}
@@ -152,8 +167,14 @@ func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent,
 		CreatedAt: time.Now().UTC(),
 	}
 	if s.Recorder != nil {
-		if _, err := s.Recorder.Record(ctx, event); err != nil {
+		stored, err := s.Recorder.Record(ctx, event)
+		if err != nil {
 			log.Printf("analytics record failed: %v", err)
+			if s.Metrics != nil {
+				s.Metrics.AnalyticsErrors.Inc()
+			}
+		} else if !stored && s.Metrics != nil {
+			s.Metrics.SamplesDropped.Inc()
 		}
 	} else {
 		// Retained for library callers; the server always uses the Redis buffer.
@@ -213,6 +234,9 @@ func (s *URLService) invalidate(ctx context.Context, codes ...string) {
 	if s.Cache != nil {
 		if err := s.Cache.Invalidate(ctx, codes...); err != nil {
 			log.Printf("URL cache invalidation failed: %v", err)
+			if s.Metrics != nil {
+				s.Metrics.CacheErrors.Inc()
+			}
 		}
 	}
 }
