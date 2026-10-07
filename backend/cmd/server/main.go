@@ -35,6 +35,9 @@ func main() {
 	_ = godotenv.Load()
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatal(err)
+	}
 
 	// Swagger
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
