@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -21,7 +22,7 @@ func RedisConnection() (*redis.Client, error) {
 	var err error
 
 	// If it starts with redis:// or rediss://, parse as a URL
-	if len(redisURL) > 8 && (redisURL[:8] == "redis://" || redisURL[:9] == "rediss://") {
+	if strings.HasPrefix(redisURL, "redis://") || strings.HasPrefix(redisURL, "rediss://") {
 		opt, err = redis.ParseURL(redisURL)
 		if err != nil {
 			return nil, err
@@ -37,6 +38,7 @@ func RedisConnection() (*redis.Client, error) {
 
 	_, err = rdb.Ping(context.Background()).Result()
 	if err != nil {
+		_ = rdb.Close()
 		return nil, err
 	}
 

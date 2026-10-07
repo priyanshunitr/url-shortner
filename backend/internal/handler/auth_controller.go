@@ -69,7 +69,7 @@ func (auc *AuthController) Register(c *gin.Context) {
 			HttpOnly: true,
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			Path:     "/api/v1/auth/refresh",
+			Path:     "/api/v1/auth",
 			MaxAge:   7 * 24 * 3600,
 		},
 	)
@@ -124,7 +124,7 @@ func (auc *AuthController) Login(c *gin.Context) {
 			HttpOnly: true,
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			Path:     "/api/v1/auth/refresh",
+			Path:     "/api/v1/auth",
 			MaxAge:   7 * 24 * 3600,
 		},
 	)
@@ -165,7 +165,7 @@ func (auc *AuthController) Logout(c *gin.Context) {
 			HttpOnly: true,
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			Path:     "/api/v1/auth/refresh",
+			Path:     "/api/v1/auth",
 			MaxAge:   -1,
 		},
 	)
@@ -258,7 +258,7 @@ func (auc *AuthController) RefreshToken(c *gin.Context) {
 			HttpOnly: true,
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			Path:     "/api/v1/auth/refresh",
+			Path:     "/api/v1/auth",
 			MaxAge:   7 * 24 * 3600,
 		},
 	)
@@ -345,15 +345,8 @@ func (auc *AuthController) RevokeSession(c *gin.Context) {
 // @Router       /auth/sessions/others [delete]
 func (auc *AuthController) RevokeAllOtherSessions(c *gin.Context) {
 	userID := c.MustGet("userID").(int64)
-	currentSessionIDStr := c.MustGet("sessionID").(string) // from jwt claims
-
-	currentSessionID, err := strconv.ParseInt(currentSessionIDStr, 10, 64)
-	if err != nil {
-		c.JSON(400, models.HTTPError{Error: "invalid current session ID format"})
-		return
-	}
-
-	err = auc.Service.RevokeAllOtherSessions(c.Request.Context(), userID, currentSessionID)
+	currentSessionID := c.MustGet("sessionID").(int64)
+	err := auc.Service.RevokeAllOtherSessions(c.Request.Context(), userID, currentSessionID)
 	if err != nil {
 		c.JSON(500, models.HTTPError{Error: err.Error()})
 		return

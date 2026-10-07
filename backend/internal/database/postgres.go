@@ -50,10 +50,10 @@ func PostgreSQLConnection() (*pgxpool.Pool, error) {
 
 	//verify db connection
 	if err := db.Ping(context.Background()); err != nil {
+		db.Close()
 		return nil, err
 	}
 
 	log.Println("db connection successful")
-	log.Println(os.Getenv("DB_SERVER_URL"))
 	return db, nil
 }

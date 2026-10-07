@@ -23,6 +23,7 @@ func OpenDBConnection() (*Queries, error) {
 	//redis conn
 	rdb, err := RedisConnection()
 	if err != nil {
+		db.Close()
 		return nil, err
 	}
 

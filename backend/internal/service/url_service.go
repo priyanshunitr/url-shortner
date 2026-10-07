@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ type URLService struct {
 type ClickRecorder interface {
 	Record(context.Context, *models.ClickEvent) (bool, error)
 }
+
+var ErrInvalidURL = errors.New("invalid URL request")
 
 func NewURLService(repo URLRepository, urlCache cache.URLCache) *URLService {
 	return &URLService{Repo: repo, Cache: urlCache}
@@ -88,8 +91,12 @@ func (s *URLService) createURL(ctx context.Context, userID int64, longURL, custo
 }
 
 func (s *URLService) CreatePublicURL(ctx context.Context, longURL string, expiry *time.Time) (*models.CoreURLResponse, error) {
+	parsed, err := url.ParseRequestURI(longURL)
+	if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || len(longURL) > 8192 {
+		return nil, fmt.Errorf("%w: url must be an absolute HTTP(S) URL, maximum 8192 bytes", ErrInvalidURL)
+	}
 	if expiry != nil && !expiry.After(time.Now()) {
-		return nil, errors.New("expires_at must be in the future")
+		return nil, fmt.Errorf("%w: expires_at must be in the future", ErrInvalidURL)
 	}
 	url, err := s.createURL(ctx, 0, longURL, "", expiry)
 	if err != nil {
@@ -232,6 +239,8 @@ func (s *URLService) BulkDeleteUserURLs(ctx context.Context, ids []int64, userID
 
 func (s *URLService) invalidate(ctx context.Context, codes ...string) {
 	if s.Cache != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cancel()
 		if err := s.Cache.Invalidate(ctx, codes...); err != nil {
 			log.Printf("URL cache invalidation failed: %v", err)
 			if s.Metrics != nil {

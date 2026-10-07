@@ -1,11 +1,12 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gottatouchsomegrass/url/internal/service"
 )
 
 type CreateURLRequest struct {
@@ -30,17 +31,12 @@ func (uc *URLController) CreatePublicURL(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "provide a valid JSON URL request"})
 		return
 	}
-	parsed, err := url.ParseRequestURI(req.URL)
-	if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || len(req.URL) > 8192 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "url must be an absolute HTTP or HTTPS URL (maximum 8192 bytes)"})
-		return
-	}
-	if req.ExpiresAt != nil && !req.ExpiresAt.After(time.Now()) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "expires_at must be in the future"})
-		return
-	}
 	result, err := uc.Service.CreatePublicURL(c.Request.Context(), req.URL, req.ExpiresAt)
 	if err != nil {
+		if errors.Is(err, services.ErrInvalidURL) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create short URL"})
 		return
 	}
