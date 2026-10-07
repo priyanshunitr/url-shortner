@@ -1,0 +1,116 @@
+---
+title: "Building a High-Performance URL Shortener SaaS in Go: Architecture, Auth, and Analytics"
+date: "2026-07-17"
+description: "A deep dive into the architecture, auth decisions, and tech stack behind building a modern URL shortener SaaS."
+tags: ["Go", "SaaS", "PostgreSQL", "Redis", "Backend", "Authentication", "SystemDesign"]
+cover_image: "https://your-image-link-here.com/cover.jpg"
+---
+
+Building a URL shortener is a classic rite of passage for developers. It’s the "Hello World" of system design interviews. It sounds incredibly simple at first: take a long string, hash it, save it to a database, and redirect the user when they click it. 
+
+But when you transition from a simple weekend side-project to a full-blown Software-as-a-Service (SaaS) that users can actually rely on, the complexity ramps up exponentially. Suddenly, you have to think about cache-aside patterns for lightning-fast redirects, asynchronous click analytics, rate limiting to prevent abuse, and building a rock-solid authentication system.
+
+In this post, I want to take you under the hood of my URL shortener SaaS. I’ll break down the architectural decisions I made, the struggles I faced with refresh token rotation, and why **Go** turned out to be the absolute perfect tool for the job.
+
+---
+
+## 🛠️ The Tech Stack
+
+I wanted this backend to be wildly fast, highly concurrent, and lean on memory usage. The choice of language was easy.
+
+* **Language:** Go (Golang) - For its unmatched concurrency model and raw performance.
+* **Web Framework:** Gin - An extremely fast HTTP web framework for Go.
+* **Database:** PostgreSQL - The undisputed king of relational databases. I opted to use `pgxpool` for direct, high-performance database access instead of a bulky ORM like GORM.
+* **Caching & Rate Limiting:** Redis - Essential for keeping redirects under 50ms.
+
+---
+
+## 🏗️ The Architecture: Layered vs Modular Monolith
+
+When starting the project, the very first hurdle was deciding how to structure the codebase. If you mess this up early, you pay the "refactoring tax" for months.
+
+I initially considered a **Modular Monolith** (organizing folders vertically by feature, e.g., `/auth`, `/urls`, `/analytics`). Modular monoliths are trendy and make it easy to extract microservices later on.
+
+However, because I was prioritizing a clean, maintainable MVP, I went with a strict **Layered Architecture** (Horizontal Slicing). It keeps the cognitive load low and enforces a strict separation of concerns.
+
+Here is what the structure looks like:
+
+```text
+app/
+  ├── controllers/  # HTTP transport logic (JSON binding, Cookies)
+  ├── services/     # Core Business logic & DB Transactions coordination
+  ├── repositories/ # Raw SQL and Database Interaction (pgx)
+  └── models/       # Data structs and DTOs
+```
+
+### The Golden Rule: No Business Logic in Controllers
+By strictly enforcing this architecture, my controllers are essentially "dumb". They just parse the incoming HTTP request, hand the data to the `Service` layer, and return the JSON response. 
+
+The `Service` layer orchestrates the database transactions (using `pgx.Tx`). If a user registers, the service creates the user row, generates the tokens, limits the maximum active sessions, and commits the transaction. If any step fails, the entire operation rolls back safely. No orphaned rows, no data corruption.
+
+---
+
+## 🔐 Solving the Authentication Puzzle
+
+Authentication is notoriously easy to get wrong. I wanted stateless scalability, but I also wanted the ability to instantly revoke compromised sessions. 
+
+I implemented a dual-token system:
+1. **Access Tokens:** Short-lived (15 min) JWTs returned in the JSON response payload.
+2. **Refresh Tokens:** Long-lived (7 days) hashed tokens returned via strict, `HttpOnly`, `Secure`, `SameSite=Lax` cookies.
+
+### The Refresh Token Rotation Dilemma
+
+This is where I hit an interesting crossroads. When a user's access token expires, they hit the `/refresh` endpoint to get a new one. For security, you should rotate the refresh token as well. But there are two wildly different ways to handle this at the database level:
+
+#### Method 1: Revoke + Insert
+You mark the old token as revoked (or delete it) and insert a brand new row for the new token. 
+* **Pros:** This is the enterprise gold standard. It creates a paper trail. If a thief steals a token and uses it, the legitimate user will eventually try to use their old, revoked token. This triggers a "reuse detection" alarm, letting your backend instantly wipe all active sessions to protect the user.
+* **Cons:** Massive database bloat. If a user keeps a tab open for a month, you generate hundreds of dead token rows that require background cron jobs to clean up.
+
+#### Method 2: In-Place Rotation
+You simply run an SQL `UPDATE` on the existing database row with a new token hash and a new expiration date.
+* **Pros:** Zero database bloat. One active device equals exactly one row in the database.
+* **Cons:** You lose strict token reuse detection.
+
+### My Decision
+For this MVP, I chose **In-Place Rotation**. Not only does it keep the database lean, but it conceptually maps perfectly to a **"1 row = 1 active session"** model. 
+
+Because I made this specific architectural choice, I was able to effortlessly build a **"Logged In Devices"** dashboard feature right out of the box! 
+
+Here is how I did it:
+1. When generating the JWT, I embed the primary key (`SessionID`) of the refresh token row directly into the JWT claims.
+2. When the user requests their active sessions, the backend queries the `refresh_tokens` table.
+3. The backend uses the `github.com/mssola/user_agent` package to parse the raw HTTP User-Agent string into human-readable formats (e.g., "Chrome on Windows 10").
+4. Since the backend knows the `SessionID` from the JWT, it can easily flag which session is the `is_current_device`.
+
+Users can now view their active sessions and remotely log out of unknown devices. A huge win for UX and security, born out of a simple database architecture decision!
+
+---
+
+## ⚡ Lightning Fast Redirects and Analytics
+
+A URL shortener lives and dies by its redirect speed. If a user clicks a link and it takes 2 seconds to load, your product is dead in the water. Hitting a Postgres database for every single click simply won't scale.
+
+To solve this, I implemented a **Cache-Aside pattern** using Redis. 
+
+When a short URL is requested:
+1. The system checks Redis. 
+2. If it's a **Cache Hit**, it redirects instantly. 
+3. If it's a **Cache Miss**, it queries Postgres, caches the result in Redis (with a TTL), and then redirects.
+
+Simultaneously, we need to track analytics—things like the user's Operating System, Browser, and geographic location. But processing analytics during the HTTP request blocks the redirect! To ensure the user experiences absolute zero latency, all click events are pushed to a background worker or a Redis queue. The redirect happens immediately, and the analytics are processed and saved to Postgres asynchronously.
+
+---
+
+## 🧠 Lessons Learned & Final Thoughts
+
+Building this SaaS in Go was incredibly rewarding. Go's simplicity, typed safety, and raw speed make it a joy for backend engineering.
+
+The biggest takeaway for me was the importance of **avoiding premature optimization**. It’s easy to read engineering blogs and get bogged down in building microservices, Event Sourcing, or strict token lineage tracking from day one. 
+
+But by sticking to a clean, decoupled layered architecture and making pragmatic choices (like In-Place token rotation), I was able to move fast, ship a highly secure product, and leave the door wide open to easily scale into a microservice or modular monolith in the future when the user base demands it.
+
+If you are thinking about building a SaaS, pick a stack you know, enforce a clean architecture, and just start writing code.
+
+---
+*Have you built a URL shortener? What stack did you choose? Did you go with a Monolith or Microservices? lmk*
