@@ -1,0 +1,27 @@
+{
+  "client": {
+    "arch": "amd64",
+    "go": "go1.26.5",
+    "logical_cpus": 16,
+    "os": "windows"
+  },
+  "concurrency": 100,
+  "elapsed_seconds": 1.6423966,
+  "expected_status": 302,
+  "follows_redirects": false,
+  "label": "cache-on",
+  "latency_ms": {
+    "mean": 16.37695229000003,
+    "p50": 15.6665,
+    "p95": 20.3169,
+    "p99": 43.0595
+  },
+  "requests": 10000,
+  "requests_per_second": 6088.6633593859115,
+  "status_counts": {
+    "302": 10000
+  },
+  "successful_requests": 10000,
+  "timestamp_utc": "2026-10-07T21:07:41Z",
+  "url": "http://localhost:8080/uaNBqyHx"
+}
