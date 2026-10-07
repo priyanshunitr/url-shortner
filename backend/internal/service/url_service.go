@@ -16,9 +16,14 @@ import (
 )
 
 type URLService struct {
-	Repo    URLRepository
-	Cache   cache.URLCache
-	BaseURL string
+	Repo     URLRepository
+	Cache    cache.URLCache
+	BaseURL  string
+	Recorder ClickRecorder
+}
+
+type ClickRecorder interface {
+	Record(context.Context, *models.ClickEvent) (bool, error)
 }
 
 func NewURLService(repo URLRepository, urlCache cache.URLCache) *URLService {
@@ -135,11 +140,6 @@ func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent,
 		return "", errors.New("link expired")
 	}
 
-	// increment clicks asynchronously or handle errors quietly
-	go func() {
-		_ = s.Repo.IncrementClicks(context.Background(), url.ID)
-	}()
-
 	ua := useragent.Parse(rawUserAgent)
 	event := &models.ClickEvent{
 		URLID:     url.ID,
@@ -149,12 +149,21 @@ func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent,
 		Country:   "",
 		Device:    ua.Device,
 		Browser:   ua.Name,
+		CreatedAt: time.Now().UTC(),
 	}
-
-	// Insert analytics asynchronously to ensure redirect is lightning fast
-	go func() {
-		_ = s.Repo.CreateClickEvent(context.Background(), event)
-	}()
+	if s.Recorder != nil {
+		if _, err := s.Recorder.Record(ctx, event); err != nil {
+			log.Printf("analytics record failed: %v", err)
+		}
+	} else {
+		// Retained for library callers; the server always uses the Redis buffer.
+		go func() {
+			writeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = s.Repo.IncrementClicks(writeCtx, url.ID)
+			_ = s.Repo.CreateClickEvent(writeCtx, event)
+		}()
+	}
 
 	return url.LongURL, nil
 }

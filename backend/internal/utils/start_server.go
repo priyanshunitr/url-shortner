@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -16,7 +17,7 @@ func StartSvrGracefulShutdown(srv *http.Server) {
 	//running server in bg
 	go func() {
 		log.Println("Svr running at", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Listen&Serve error: %v\n", err)
 		}
 	}()

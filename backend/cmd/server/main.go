@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
@@ -60,6 +61,12 @@ func main() {
 	// )
 
 	urlService := services.NewURLService(dbq.URLQuery, cache.NewRedisURLCache(dbq.Redis, time.Hour))
+	buffer := &cache.RedisAnalytics{Client: dbq.Redis}
+	urlService.Recorder = buffer
+	worker := &services.AnalyticsWorker{Buffer: buffer, Repo: dbq.URLQuery, Interval: 5 * time.Second}
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+	go func() { defer close(workerDone); worker.Run(workerCtx) }()
 	urlService.BaseURL = os.Getenv("BASE_URL")
 	if urlService.BaseURL == "" {
 		urlService.BaseURL = "http://localhost:8080"
@@ -94,4 +101,13 @@ func main() {
 
 	svr := configs.ConfigHTTPServer(r)
 	utils.StartSvrGracefulShutdown(svr)
+	stopWorker()
+	<-workerDone
+	flushCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := worker.Flush(flushCtx); err != nil {
+		log.Printf("final analytics flush failed: %v", err)
+	}
+	dbq.URLQuery.DB.Close()
+	_ = dbq.Redis.Close()
 }
