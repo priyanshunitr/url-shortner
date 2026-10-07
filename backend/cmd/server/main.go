@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/gottatouchsomegrass/url/docs"
+	"github.com/gottatouchsomegrass/url/internal/cache"
 	"github.com/gottatouchsomegrass/url/internal/config"
 	"github.com/gottatouchsomegrass/url/internal/database"
 	"github.com/gottatouchsomegrass/url/internal/handler"
@@ -55,14 +56,14 @@ func main() {
 	//  ),
 	// )
 
-	urlService := services.NewURLService(dbq.URLQuery)
+	urlService := services.NewURLService(dbq.URLQuery, cache.NewRedisURLCache(dbq.Redis, time.Hour))
 	urlService.BaseURL = os.Getenv("BASE_URL")
 	if urlService.BaseURL == "" {
 		urlService.BaseURL = "http://localhost:8080"
 	}
 	urlController := controllers.NewURLController(
 		urlService,
-		dbq.URLQuery.RDB,
+		dbq.Redis,
 	)
 	analyticsService := services.NewAnalyticsService(dbq.AnalyticsQuery)
 	analyticsController := controllers.NewAnalyticsController(
@@ -84,9 +85,9 @@ func main() {
 	routes.PublicRoutes(api, urlController, analyticsController, authController)
 	routes.PrivateRoutes(api, urlController, analyticsController, authController)
 	routes.AdminRoutes(api, adminController)
-	r.POST("/api/urls", middleware.RateLimiter(dbq.URLQuery.RDB, 10, time.Minute), urlController.CreatePublicURL)
-	r.GET("/api/urls/:code/stats", middleware.RateLimiter(dbq.URLQuery.RDB, 100, time.Minute), urlController.GetPublicStats)
-	r.GET("/:shortCode", middleware.RateLimiter(dbq.URLQuery.RDB, 100, time.Minute), urlController.RedirectURL)
+	r.POST("/api/urls", middleware.RateLimiter(dbq.Redis, 10, time.Minute), urlController.CreatePublicURL)
+	r.GET("/api/urls/:code/stats", middleware.RateLimiter(dbq.Redis, 100, time.Minute), urlController.GetPublicStats)
+	r.GET("/:shortCode", middleware.RateLimiter(dbq.Redis, 100, time.Minute), urlController.RedirectURL)
 
 	svr := configs.ConfigHTTPServer(r)
 	utils.StartSvrGracefulShutdown(svr)

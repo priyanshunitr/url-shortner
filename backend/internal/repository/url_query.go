@@ -5,18 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/gottatouchsomegrass/url/internal/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 )
 
 type URLQuery struct {
-	DB  *pgxpool.Pool
-	RDB *redis.Client
+	DB *pgxpool.Pool
 }
 
 // CreateURL insert url to db
@@ -75,18 +71,6 @@ func (q *URLQuery) GetPublicStats(ctx context.Context, code string) (*models.URL
 
 // GetByShortURL get by short url from db
 func (q *URLQuery) GetByShortURL(ctx context.Context, code string) (*models.URL, error) {
-	//cache-aside implementation
-	cached, err := q.RDB.Get(ctx, code).Result()
-	if err == nil {
-		return &models.URL{
-			ShortURL: code,
-			LongURL:  cached,
-		}, nil
-	}
-	if err != redis.Nil {
-		log.Println("redis err:", err)
-	}
-
 	query := `
 		SELECT id, COALESCE(user_id, 0), short_code, original_url, expires_at, click_count, created_at
 		FROM urls
@@ -95,7 +79,7 @@ func (q *URLQuery) GetByShortURL(ctx context.Context, code string) (*models.URL,
 
 	var url models.URL
 
-	err = q.DB.QueryRow(ctx, query, code).Scan(
+	err := q.DB.QueryRow(ctx, query, code).Scan(
 		&url.ID,
 		&url.UserID,
 		&url.ShortURL,
@@ -113,40 +97,11 @@ func (q *URLQuery) GetByShortURL(ctx context.Context, code string) (*models.URL,
 		return nil, err
 	}
 
-	ttl := time.Hour
-
-	if url.Expiry != nil {
-		remaining := time.Until(*url.Expiry)
-		if remaining <= 0 {
-			return nil, errors.New("link expired")
-		}
-		if remaining <= ttl {
-			ttl = remaining
-		}
-	}
-	err = q.RDB.Set(
-		ctx,
-		code,
-		url.LongURL,
-		ttl,
-	).Err()
-
-	if err != nil {
-		log.Println("redis set err:", err)
-	}
-
 	return &url, nil
 }
 
 // CustomCodeExists check whether customcode exists or not
 func (q *URLQuery) CustomCodeExists(ctx context.Context, code string) (bool, error) {
-	// _, err := q.RDB.Get(ctx,code).Result()
-	// if err==nil {
-	// 	return true, nil
-	// }
-	// if err!=redis.Nil {
-	// 	return false, err
-	// }
 	query := `
 		SELECT EXISTS (
 			SELECT 1 FROM urls WHERE short_code = $1
@@ -246,47 +201,44 @@ func (q *URLQuery) CountUserURLs(ctx context.Context, userID int64) (int, error)
 	return total, err
 }
 
-// DeleteURL deletes a URL, ensuring it belongs to the user
-func (q *URLQuery) DeleteURL(ctx context.Context, id int64, userID int64) error {
-	query := `
-		DELETE FROM urls WHERE id = $1 AND user_id = $2
-	`
-	res, err := q.DB.Exec(ctx, query, id, userID)
-	if err != nil {
-		return err
+// DeleteURL returns the shortcode invalidated by this authorized mutation.
+func (q *URLQuery) DeleteURL(ctx context.Context, id, userID int64) (string, error) {
+	var code string
+	err := q.DB.QueryRow(ctx, `DELETE FROM urls WHERE id = $1 AND user_id = $2 RETURNING short_code`, id, userID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errors.New("url not found or unauthorized")
 	}
-	if res.RowsAffected() == 0 {
-		return fmt.Errorf("url not found or unauthorized")
-	}
-	return nil
+	return code, err
 }
 
-// UpdateURL updates the original_url of a shortcode, ensuring it belongs to the user
-func (q *URLQuery) UpdateURL(ctx context.Context, id int64, userID int64, longURL string) error {
-	query := `
-		UPDATE urls SET original_url = $3 WHERE id = $1 AND user_id = $2
-	`
-	res, err := q.DB.Exec(ctx, query, id, userID, longURL)
-	if err != nil {
-		return err
+func (q *URLQuery) UpdateURL(ctx context.Context, id, userID int64, longURL string) (string, error) {
+	var code string
+	err := q.DB.QueryRow(ctx, `UPDATE urls SET original_url = $3 WHERE id = $1 AND user_id = $2 RETURNING short_code`, id, userID, longURL).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errors.New("url not found or unauthorized")
 	}
-	if res.RowsAffected() == 0 {
-		return fmt.Errorf("url not found or unauthorized")
-	}
-	return nil
+	return code, err
 }
 
-// BulkDeleteURLs deletes multiple URLs, ensuring they belong to the user
-func (q *URLQuery) BulkDeleteURLs(ctx context.Context, ids []int64, userID int64) error {
-	query := `
-		DELETE FROM urls WHERE id = ANY($1) AND user_id = $2
-	`
-	res, err := q.DB.Exec(ctx, query, ids, userID)
+func (q *URLQuery) BulkDeleteURLs(ctx context.Context, ids []int64, userID int64) ([]string, error) {
+	rows, err := q.DB.Query(ctx, `DELETE FROM urls WHERE id = ANY($1) AND user_id = $2 RETURNING short_code`, ids, userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if res.RowsAffected() == 0 {
-		return fmt.Errorf("no urls found or unauthorized")
+	defer rows.Close()
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		codes = append(codes, code)
 	}
-	return nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(codes) == 0 {
+		return nil, errors.New("no urls found or unauthorized")
+	}
+	return codes, nil
 }

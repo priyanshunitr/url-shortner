@@ -4,23 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"github.com/gottatouchsomegrass/url/internal/cache"
 	"github.com/gottatouchsomegrass/url/internal/model"
-	"github.com/gottatouchsomegrass/url/internal/repository"
 	"github.com/gottatouchsomegrass/url/internal/utils"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mileusna/useragent"
 )
 
 type URLService struct {
-	Repo    *repositories.URLQuery
+	Repo    URLRepository
+	Cache   cache.URLCache
 	BaseURL string
 }
 
-func NewURLService(repo *repositories.URLQuery) *URLService {
-	return &URLService{Repo: repo}
+func NewURLService(repo URLRepository, urlCache cache.URLCache) *URLService {
+	return &URLService{Repo: repo, Cache: urlCache}
 }
 
 func (s *URLService) ShortenURL(ctx context.Context, userID int64, userRole, longURL, customCode string) (*models.URL, error) {
@@ -101,12 +103,32 @@ func (s *URLService) GetPublicStats(ctx context.Context, code string) (*models.U
 }
 
 func (s *URLService) HandleRedirect(ctx context.Context, code, ip, rawUserAgent, referer string) (string, error) {
-	url, err := s.Repo.GetByShortURL(ctx, code)
-	if err != nil {
-		return "", errors.New("internal server error")
+	// The deadline also bounds how long a cache miss can hold an old version.
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var lookup cache.Lookup
+	if s.Cache != nil {
+		var err error
+		lookup, err = s.Cache.Get(ctx, code)
+		if err != nil {
+			log.Printf("URL cache read failed: %v", err)
+		}
 	}
+	url := lookup.URL
 	if url == nil {
-		return "", errors.New("not found")
+		var err error
+		url, err = s.Repo.GetByShortURL(ctx, code)
+		if err != nil {
+			return "", errors.New("internal server error")
+		}
+		if url == nil {
+			return "", errors.New("not found")
+		}
+		if s.Cache != nil && lookup.Version != "" {
+			if err := s.Cache.Set(ctx, url, lookup.Version); err != nil {
+				log.Printf("URL cache fill failed: %v", err)
+			}
+		}
 	}
 
 	if url.Expiry != nil && time.Now().After(*url.Expiry) {
@@ -152,25 +174,36 @@ func (s *URLService) GetUserURLs(ctx context.Context, userID int64, limit, offse
 }
 
 func (s *URLService) UpdateUserURL(ctx context.Context, id, userID int64, longURL string) error {
-	err := s.Repo.UpdateURL(ctx, id, userID, longURL)
+	code, err := s.Repo.UpdateURL(ctx, id, userID, longURL)
 	if err != nil {
 		return err
 	}
+	s.invalidate(ctx, code)
 	return nil
 }
 
 func (s *URLService) DeleteUserURL(ctx context.Context, id, userID int64) error {
-	err := s.Repo.DeleteURL(ctx, id, userID)
+	code, err := s.Repo.DeleteURL(ctx, id, userID)
 	if err != nil {
 		return err
 	}
+	s.invalidate(ctx, code)
 	return nil
 }
 
 func (s *URLService) BulkDeleteUserURLs(ctx context.Context, ids []int64, userID int64) error {
-	err := s.Repo.BulkDeleteURLs(ctx, ids, userID)
+	codes, err := s.Repo.BulkDeleteURLs(ctx, ids, userID)
 	if err != nil {
 		return err
 	}
+	s.invalidate(ctx, codes...)
 	return nil
+}
+
+func (s *URLService) invalidate(ctx context.Context, codes ...string) {
+	if s.Cache != nil {
+		if err := s.Cache.Invalidate(ctx, codes...); err != nil {
+			log.Printf("URL cache invalidation failed: %v", err)
+		}
+	}
 }

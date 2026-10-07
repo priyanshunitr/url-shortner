@@ -17,12 +17,12 @@ func AdminRoutes(r *gin.RouterGroup, ac *controllers.AdminController) {
 
 	// Admin endpoints
 	admin.GET("/users",
-		middleware.RateLimiter(ac.URLService.Repo.RDB, 100, time.Minute),
+		middleware.RateLimiter(ac.AdminService.UserRepo.RDB, 100, time.Minute),
 		ac.GetAllUsers,
 	)
 
 	admin.GET("/users/:userid/urls",
-		middleware.RateLimiter(ac.URLService.Repo.RDB, 100, time.Minute),
+		middleware.RateLimiter(ac.AdminService.UserRepo.RDB, 100, time.Minute),
 		ac.GetUserURLsAsAdmin,
 	)
 }
