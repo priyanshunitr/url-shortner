@@ -55,7 +55,7 @@ export default function LandingPage() {
     try {
       const result = await api.createLink({ originalUrl: url });
       setShortUrl(`https://${result.shortUrl}`);
-    } catch (err) {
+    } catch {
       // Handle error
     } finally {
       setIsLoading(false);

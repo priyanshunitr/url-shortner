@@ -27,7 +27,7 @@ export default function RegisterPage() {
 
     try {
       await register({ email, password });
-    } catch (err) {
+    } catch {
       setError('Registration failed. Please try again.');
     }
   };

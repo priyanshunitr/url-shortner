@@ -1,19 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useCreateLink } from '@/hooks/useLinks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ArrowLeft, Link as LinkIcon, Calendar } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon } from 'lucide-react';
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
 
 export default function CreateLinkPage() {
-  const router = useRouter();
   const createLink = useCreateLink();
   const [url, setUrl] = useState('');
   const [alias, setAlias] = useState('');
@@ -38,7 +36,7 @@ export default function CreateLinkPage() {
       
       setCreatedLink({ shortUrl: `https://${result.shortUrl}` });
       toast.success('Link created successfully!');
-    } catch (err) {
+    } catch {
       toast.error('Failed to create link. Alias might be taken.');
     }
   };

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { 
   Table, 
@@ -19,7 +18,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, ExternalLink, BarChart2, Edit, Trash, QrCode } from 'lucide-react';
+import { MoreHorizontal, ExternalLink, BarChart2, Trash, QrCode } from 'lucide-react';
 import { CopyButton } from './CopyButton';
 import { Link as LinkType } from '@/types';
 import { useDeleteLink } from '@/hooks/useLinks';
@@ -38,7 +37,7 @@ export function LinkTable({ data, isLoading }: LinkTableProps) {
       try {
         await deleteLink.mutateAsync(id);
         toast.success('Link deleted successfully');
-      } catch (err) {
+      } catch {
         toast.error('Failed to delete link');
       }
     }
