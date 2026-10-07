@@ -5,7 +5,10 @@ import (
 )
 
 func TestGenerateShortCode(t *testing.T) {
-	code := GenerateShortCode()
+	code, err := GenerateShortCode()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(code) != 8 {
 		t.Errorf("expected code length 8, got %d", len(code))
 	}
@@ -13,6 +16,6 @@ func TestGenerateShortCode(t *testing.T) {
 
 func BenchmarkGenerateShortCode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_ = GenerateShortCode()
+		_, _ = GenerateShortCode()
 	}
 }

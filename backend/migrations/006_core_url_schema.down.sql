@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS idx_click_events_url_created;
+ALTER TABLE click_events DROP CONSTRAINT click_events_url_id_fkey;
+ALTER TABLE click_events ADD CONSTRAINT click_events_url_id_fkey FOREIGN KEY (url_id) REFERENCES urls(id);
+ALTER TABLE click_events ALTER COLUMN created_at TYPE TIMESTAMP USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE urls DROP COLUMN last_accessed;
+ALTER TABLE urls ALTER COLUMN created_at TYPE TIMESTAMP USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE urls ALTER COLUMN expires_at TYPE TIMESTAMP USING expires_at AT TIME ZONE 'UTC';
+ALTER TABLE urls ALTER COLUMN short_code TYPE TEXT;
+ALTER TABLE urls ALTER COLUMN click_count DROP NOT NULL;
+ALTER TABLE urls RENAME COLUMN short_code TO short_url;
+ALTER TABLE urls RENAME COLUMN original_url TO long_url;
+ALTER TABLE urls RENAME COLUMN click_count TO clicks;
+ALTER TABLE urls RENAME COLUMN expires_at TO expiry;

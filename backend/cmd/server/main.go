@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/gottatouchsomegrass/url/docs"
@@ -54,6 +56,10 @@ func main() {
 	// )
 
 	urlService := services.NewURLService(dbq.URLQuery)
+	urlService.BaseURL = os.Getenv("BASE_URL")
+	if urlService.BaseURL == "" {
+		urlService.BaseURL = "http://localhost:8080"
+	}
 	urlController := controllers.NewURLController(
 		urlService,
 		dbq.URLQuery.RDB,
@@ -78,6 +84,9 @@ func main() {
 	routes.PublicRoutes(api, urlController, analyticsController, authController)
 	routes.PrivateRoutes(api, urlController, analyticsController, authController)
 	routes.AdminRoutes(api, adminController)
+	r.POST("/api/urls", middleware.RateLimiter(dbq.URLQuery.RDB, 10, time.Minute), urlController.CreatePublicURL)
+	r.GET("/api/urls/:code/stats", middleware.RateLimiter(dbq.URLQuery.RDB, 100, time.Minute), urlController.GetPublicStats)
+	r.GET("/:shortCode", middleware.RateLimiter(dbq.URLQuery.RDB, 100, time.Minute), urlController.RedirectURL)
 
 	svr := configs.ConfigHTTPServer(r)
 	utils.StartSvrGracefulShutdown(svr)

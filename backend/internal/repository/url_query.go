@@ -24,23 +24,53 @@ func (q *URLQuery) CreateURL(ctx context.Context, url *models.URL) error {
 	query := `
 		INSERT INTO urls (
 			user_id,
-			short_url,
-			long_url,
-			expiry
+			short_code,
+			original_url,
+			expires_at
 		)
-		VALUES ($1, $2, $3, $4)
+		VALUES (NULLIF($1, 0), $2, $3, $4)
+		RETURNING id, created_at
 	`
 
-	_, err := q.DB.Exec(
+	err := q.DB.QueryRow(
 		ctx,
 		query,
 		url.UserID,
 		url.ShortURL,
 		url.LongURL,
 		url.Expiry,
-	)
+	).Scan(&url.ID, &url.CreatedAt)
 
 	return err
+}
+
+// GetPublicStats exposes statistics only for URLs created by the public API.
+func (q *URLQuery) GetPublicStats(ctx context.Context, code string) (*models.URLStats, error) {
+	stats := &models.URLStats{TopReferrers: []models.Referrer{}}
+	var id int64
+	err := q.DB.QueryRow(ctx, `SELECT id, short_code, click_count, created_at, last_accessed, expires_at
+		FROM urls WHERE short_code = $1 AND user_id IS NULL`, code).Scan(
+		&id, &stats.ShortCode, &stats.Clicks, &stats.CreatedAt, &stats.LastAccessed, &stats.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.DB.Query(ctx, `SELECT COALESCE(NULLIF(referer, ''), 'Direct'), COUNT(*)
+		FROM click_events WHERE url_id = $1 GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 10`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ref models.Referrer
+		if err := rows.Scan(&ref.Source, &ref.Clicks); err != nil {
+			return nil, err
+		}
+		stats.TopReferrers = append(stats.TopReferrers, ref)
+	}
+	return stats, rows.Err()
 }
 
 // GetByShortURL get by short url from db
@@ -58,9 +88,9 @@ func (q *URLQuery) GetByShortURL(ctx context.Context, code string) (*models.URL,
 	}
 
 	query := `
-		SELECT id, user_id, short_url, long_url, expiry, clicks, created_at
+		SELECT id, COALESCE(user_id, 0), short_code, original_url, expires_at, click_count, created_at
 		FROM urls
-		WHERE short_url = $1
+		WHERE short_code = $1
 	`
 
 	var url models.URL
@@ -119,7 +149,7 @@ func (q *URLQuery) CustomCodeExists(ctx context.Context, code string) (bool, err
 	// }
 	query := `
 		SELECT EXISTS (
-			SELECT 1 FROM urls WHERE short_url = $1
+			SELECT 1 FROM urls WHERE short_code = $1
 		)
 	`
 	var isexist bool
@@ -133,7 +163,7 @@ func (q *URLQuery) CustomCodeExists(ctx context.Context, code string) (bool, err
 func (q *URLQuery) IncrementClicks(ctx context.Context, id int64) error {
 	query := `
 		UPDATE urls
-		SET clicks = clicks + 1
+		SET click_count = click_count + 1
 		WHERE id = $1
 	`
 	result, err := q.DB.Exec(ctx, query, id)
@@ -171,7 +201,7 @@ func (q *URLQuery) CreateClickEvent(
 // GetUserURLs returns all URLs created by a specific user, with pagination
 func (q *URLQuery) GetUserURLs(ctx context.Context, userID int64, limit int, offset int) ([]models.URL, error) {
 	query := `
-		SELECT id, user_id, short_url, long_url, expiry, clicks, created_at
+		SELECT id, COALESCE(user_id, 0), short_code, original_url, expires_at, click_count, created_at
 		FROM urls
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -231,10 +261,10 @@ func (q *URLQuery) DeleteURL(ctx context.Context, id int64, userID int64) error 
 	return nil
 }
 
-// UpdateURL updates the long_url of a shortcode, ensuring it belongs to the user
+// UpdateURL updates the original_url of a shortcode, ensuring it belongs to the user
 func (q *URLQuery) UpdateURL(ctx context.Context, id int64, userID int64, longURL string) error {
 	query := `
-		UPDATE urls SET long_url = $3 WHERE id = $1 AND user_id = $2
+		UPDATE urls SET original_url = $3 WHERE id = $1 AND user_id = $2
 	`
 	res, err := q.DB.Exec(ctx, query, id, userID, longURL)
 	if err != nil {

@@ -215,9 +215,9 @@ func (q *AnalyticsQuery) GetURLByID(
 		SELECT
 			id,
 			user_id,
-			long_url,
-			short_url,
-			expiry,
+			original_url,
+			short_code,
+			expires_at,
 			clicks,
 			created_at
 		FROM urls
