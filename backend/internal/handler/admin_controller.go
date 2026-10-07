@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gottatouchsomegrass/url/app/models"
-	"github.com/gottatouchsomegrass/url/app/services"
+	"github.com/gottatouchsomegrass/url/internal/model"
+	"github.com/gottatouchsomegrass/url/internal/service"
 )
 
 type AdminController struct {

@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gottatouchsomegrass/url/app/controllers"
-	"github.com/gottatouchsomegrass/url/pkg/middleware"
+	"github.com/gottatouchsomegrass/url/internal/handler"
+	"github.com/gottatouchsomegrass/url/internal/middleware"
 )
 
 func PrivateRoutes(r *gin.RouterGroup,

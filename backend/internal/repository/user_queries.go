@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gottatouchsomegrass/url/app/models"
+	"github.com/gottatouchsomegrass/url/internal/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"

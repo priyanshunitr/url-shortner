@@ -2,7 +2,7 @@
 
 APP_NAME = url 
 BUILD_DIR = $(PWD)/build
-MIGRATIONS_FOLDER = $(PWD)/platform/migrations
+MIGRATIONS_FOLDER = $(PWD)/migrations
 DATABASE_URL = postgres://urluser:yourpassword@127.0.0.1:5432/url_shortener?sslmode=disable
 
 clean:
@@ -16,7 +16,7 @@ test: security
 	go tool cover -func=cover.out
 
 build: clean test
-	CGO_ENABLED=0 go build -ldflags="-w -s" -o $(BUILD_DIR)/$(APP_NAME) main.go
+	CGO_ENABLED=0 go build -ldflags="-w -s" -o $(BUILD_DIR)/$(APP_NAME) ./cmd/server
 
 run: swag build
 	$(BUILD_DIR)/$(APP_NAME)
@@ -66,4 +66,4 @@ docker.stop.postgres:
 	docker stop dev-postgres
 
 swag:
-	swag init
+	swag init -g cmd/server/main.go

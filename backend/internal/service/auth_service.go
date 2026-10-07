@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gottatouchsomegrass/url/app/models"
-	"github.com/gottatouchsomegrass/url/app/repositories"
-	"github.com/gottatouchsomegrass/url/pkg/utils"
+	"github.com/gottatouchsomegrass/url/internal/model"
+	"github.com/gottatouchsomegrass/url/internal/repository"
+	"github.com/gottatouchsomegrass/url/internal/utils"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )

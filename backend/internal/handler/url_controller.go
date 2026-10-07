@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gottatouchsomegrass/url/app/models"
-	"github.com/gottatouchsomegrass/url/app/services"
-	"github.com/gottatouchsomegrass/url/pkg/utils"
+	"github.com/gottatouchsomegrass/url/internal/model"
+	"github.com/gottatouchsomegrass/url/internal/service"
+	"github.com/gottatouchsomegrass/url/internal/utils"
 	"github.com/redis/go-redis/v9"
 )
 

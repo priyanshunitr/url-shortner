@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gottatouchsomegrass/url/app/repositories"
-	"github.com/gottatouchsomegrass/url/pkg/utils"
+	"github.com/gottatouchsomegrass/url/internal/repository"
+	"github.com/gottatouchsomegrass/url/internal/utils"
 )
 
 func AuthMiddleware(q *repositories.UserQuery) gin.HandlerFunc {

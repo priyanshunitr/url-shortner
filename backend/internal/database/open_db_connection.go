@@ -2,7 +2,7 @@
 package database
 
 import (
-	"github.com/gottatouchsomegrass/url/app/repositories"
+	"github.com/gottatouchsomegrass/url/internal/repository"
 )
 
 type Queries struct {

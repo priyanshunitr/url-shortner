@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gottatouchsomegrass/url/app/models"
-	"github.com/gottatouchsomegrass/url/app/repositories"
+	"github.com/gottatouchsomegrass/url/internal/model"
+	"github.com/gottatouchsomegrass/url/internal/repository"
 )
 
 type AnalyticsService struct {
