@@ -68,3 +68,25 @@ func TestInvalidationRejectsInFlightStaleFill(t *testing.T) {
 		t.Fatal("current generation could not fill cache")
 	}
 }
+
+func TestShortCacheTTLStillProtectsInFlightReads(t *testing.T) {
+	m := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: m.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	c := NewRedisURLCache(client, time.Millisecond)
+	ctx := context.Background()
+	old, err := c.Get(ctx, "shortttl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Invalidate(ctx, "shortttl"); err != nil {
+		t.Fatal(err)
+	}
+	m.FastForward(time.Second)
+	if err := c.Set(ctx, &models.URL{ID: 1, ShortURL: "shortttl", LongURL: "https://old.example"}, old.Version); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := c.Get(ctx, "shortttl"); err != nil || result.URL != nil {
+		t.Fatalf("short TTL allowed stale fill: %+v, %v", result, err)
+	}
+}

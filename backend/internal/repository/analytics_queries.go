@@ -20,9 +20,9 @@ func (q *AnalyticsQuery) GetAnalyticsOverview(
 ) (*models.AnalyticsOverview, error) {
 	query := `
 		SELECT
-			SUM(CASE WHEN created_at >= NOW() - INTERVAL '1 day' THEN 1 ELSE 0 END) AS today,
-			SUM(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END) AS this_week,
-			SUM(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 ELSE 0 END) AS this_month,
+			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '1 day') AS today,
+			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS this_week,
+			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS this_month,
 			COUNT(*) AS total_clicks
 		FROM click_events
 		WHERE url_id = $1
@@ -43,11 +43,11 @@ func (q *AnalyticsQuery) GetDailyClicks(
 	urlID int64,
 ) ([]models.DailyClick, error) {
 	query := `
-		SELECT DATE(created_at) AS date, COUNT(*) AS clicks
+		SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*) AS clicks
 		FROM click_events
 		WHERE url_id = $1
-		GROUP BY DATE(created_at)
-		ORDER BY DATE(created_at);
+		GROUP BY date
+		ORDER BY date;
 	`
 	rows, err := q.DB.Query(ctx, query, urlID)
 	if err != nil {
@@ -214,11 +214,11 @@ func (q *AnalyticsQuery) GetURLByID(
 	query := `
 		SELECT
 			id,
-			user_id,
+			COALESCE(user_id, 0),
 			original_url,
 			short_code,
 			expires_at,
-			clicks,
+			click_count,
 			created_at
 		FROM urls
 		WHERE id = $1

@@ -9,10 +9,10 @@ import (
 type URL struct {
 	ID        int64      `json:"id" db:"id"` //go for uuid later
 	UserID    int64      `json:"user_id" db:"user_id"`
-	LongURL   string     `json:"long_url" db:"long_url" binding:"required,url"`
-	ShortURL  string     `json:"short_url" db:"short_url" binding:"required,shortcode"`
-	Expiry    *time.Time `json:"expiry,omitempty" db:"expiry"`
-	Clicks    int64      `json:"clicks" db:"clicks"`
+	LongURL   string     `json:"long_url" db:"original_url" binding:"required,url"`
+	ShortURL  string     `json:"short_url" db:"short_code" binding:"required,shortcode"`
+	Expiry    *time.Time `json:"expiry,omitempty" db:"expires_at"`
+	Clicks    int64      `json:"clicks" db:"click_count"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 }
 

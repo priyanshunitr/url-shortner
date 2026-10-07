@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
+
+type loseFirstAck struct {
+	services.AnalyticsBuffer
+	lost bool
+}
+
+func (b *loseFirstAck) Ack(ctx context.Context, key string) error {
+	if !b.lost {
+		b.lost = true
+		return errors.New("simulated lost Redis acknowledgement")
+	}
+	return b.AnalyticsBuffer.Ack(ctx, key)
+}
 
 func TestCoreIntegration(t *testing.T) {
 	dbURL, redisURL := os.Getenv("INTEGRATION_DATABASE_URL"), os.Getenv("INTEGRATION_REDIS_URL")
@@ -129,12 +143,23 @@ func TestCoreIntegration(t *testing.T) {
 	if err := worker.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Retry a genuinely committed SQL batch whose Redis ACK was lost.
+	if w := request("GET", "/"+created.ShortCode, ""); w.Code != 302 {
+		t.Fatal(w.Body.String())
+	}
+	retryWorker := &services.AnalyticsWorker{Buffer: &loseFirstAck{AnalyticsBuffer: buffer}, Repo: repo}
+	if err := retryWorker.Flush(ctx); err == nil {
+		t.Fatal("lost ACK was not surfaced")
+	}
+	if err := retryWorker.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if err := worker.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 	w = request("GET", "/api/urls/"+created.ShortCode+"/stats", "")
 	var result models.URLStats
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || result.Clicks != 10 || result.LastAccessed == nil || len(result.TopReferrers) != 1 {
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || result.Clicks != 11 || result.LastAccessed == nil || len(result.TopReferrers) != 1 || result.TopReferrers[0].Clicks != 11 {
 		t.Fatalf("persisted stats: %+v, %v, %s", result, err, w.Body)
 	}
 	for i := 0; i < 9; i++ {
@@ -162,6 +187,20 @@ func TestCoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	legacyAnalytics := &repositories.AnalyticsQuery{DB: pool}
+	if loaded, err := legacyAnalytics.GetURLByID(ctx, u.ID); err != nil || loaded == nil || loaded.ID != u.ID {
+		t.Fatalf("legacy ownership lookup after migration: %+v, %v", loaded, err)
+	}
+	if overview, err := legacyAnalytics.GetAnalyticsOverview(ctx, u.ID); err != nil || overview.TotalClicks != 0 {
+		t.Fatalf("empty legacy analytics: %+v, %v", overview, err)
+	}
+	publicURL, err := repo.GetByShortURL(ctx, created.ShortCode)
+	if err != nil || publicURL == nil {
+		t.Fatalf("public URL lookup: %v", err)
+	}
+	if daily, err := legacyAnalytics.GetDailyClicks(ctx, publicURL.ID); err != nil || len(daily) != 1 || daily[0].Clicks != 11 {
+		t.Fatalf("UTC daily analytics: %+v, %v", daily, err)
+	}
 	if w := request("GET", "/editme", ""); w.Code != 302 {
 		t.Fatal(w.Body.String())
 	}
@@ -184,7 +223,7 @@ func TestCoreIntegration(t *testing.T) {
 		t.Fatalf("deleted URL poisoned buffered analytics: %v", err)
 	}
 	w = request("GET", "/metrics", "")
-	for _, metric := range []string{"cache_hits_total 9", "rate_limit_rejections_total 1", "analytics_flush_errors_total 0"} {
+	for _, metric := range []string{"cache_hits_total 10", "rate_limit_rejections_total 1", "analytics_flush_errors_total 0"} {
 		if !strings.Contains(w.Body.String(), metric) {
 			t.Fatalf("missing %s in metrics", metric)
 		}

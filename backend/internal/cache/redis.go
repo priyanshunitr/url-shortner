@@ -99,9 +99,10 @@ func (c *RedisURLCache) Set(ctx context.Context, url *models.URL, version string
 
 func (c *RedisURLCache) Invalidate(ctx context.Context, codes ...string) error {
 	var result error
+	versionTTL := max(2*c.TTL, 10*time.Second)
 	for _, code := range codes {
 		// Versions outlive a cached value and the bounded in-flight DB reads.
-		if err := invalidateURL.Run(ctx, c.Client, urlKeys(code), (2 * c.TTL).Milliseconds()).Err(); err != nil {
+		if err := invalidateURL.Run(ctx, c.Client, urlKeys(code), versionTTL.Milliseconds()).Err(); err != nil {
 			result = errors.Join(result, err)
 		}
 	}
