@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
 
     timeout-minutes: 5
+    env:
+      INTEGRATION_DATABASE_URL: postgres://urluser:yourpassword@127.0.0.1:5432/url_shortener_test?sslmode=disable
+      INTEGRATION_REDIS_URL: redis://127.0.0.1:6379/13
 
     services:
       postgres:
@@ -101,7 +104,7 @@ jobs:
         run: go vet ./...
 
       - name: Run tests
-        run: go test -v -race -count=1 ./...
+        run: go test -v -race -tags integration -count=1 ./...
 
       - name: Build application
         run: go build ./...

@@ -1,42 +1,103 @@
+name: url-shortner-core
 services:
   postgres:
-    image: docker.io/library/postgres:17
-
-    container_name: url-shortener-postgres
-
-    restart: unless-stopped
-
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: urluser
-      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
       POSTGRES_DB: url_shortener
-
     ports:
-      - "5432:5432"
-
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data:Z
-
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U urluser -d url_shortener"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-#   redis:
-#     image: docker.io/library/redis:7-alpine
-#     container_name: url-shortener-redis
-#     restart: unless-stopped
-#     ports:
-#       - "6379:6379"
-#     volumes:
-#       - redis_data:/data
-#     healthcheck:
-#       test: ["CMD", "redis-cli", "ping"]
-#       interval: 10s
-#       timeout: 5s
-#       retries: 5
-
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    image: url-shortner-backend:local
+    command: ["/app/migrate"]
+    environment:
+      DB_SERVER_URL: postgres://urluser:${POSTGRES_PASSWORD:-local-development-password}@postgres:5432/url_shortener?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    build: .
+    image: url-shortner-backend:local
+    init: true
+    read_only: true
+    tmpfs: ["/tmp"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    environment:
+      DB_SERVER_URL: postgres://urluser:${POSTGRES_PASSWORD:-local-development-password}@postgres:5432/url_shortener?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-replace-before-deployment}
+      PORT: "8080"
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      GIN_MODE: release
+      APP_ENV: ${APP_ENV:-debug}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      CACHE_TTL: ${CACHE_TTL:-1h}
+      ANALYTICS_FLUSH_INTERVAL: ${ANALYTICS_FLUSH_INTERVAL:-5s}
+      CREATE_RATE_LIMIT: ${CREATE_RATE_LIMIT:-10}
+      REDIRECT_RATE_LIMIT: ${REDIRECT_RATE_LIMIT:-100}
+      STATS_RATE_LIMIT: ${STATS_RATE_LIMIT:-100}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    image: url-shortner-tests:local
+    command: ["go", "test", "-race", "-tags", "integration", "-count=1", "./..."]
+    environment:
+      INTEGRATION_DATABASE_URL: postgres://urluser:${POSTGRES_PASSWORD:-local-development-password}@postgres:5432/url_shortener?sslmode=disable
+      INTEGRATION_REDIS_URL: redis://redis:6379/13
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    profiles: ["monitoring"]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
 volumes:
   postgres_data:
-#   redis_data:
+  redis_data:
+  prometheus_data:

@@ -1,26 +1,20 @@
-FROM golang:1.21-alpine AS builder
-
-# Move to working directory (/build).
-WORKDIR /build
-
-# Copy and download dependency using go mod.
+FROM golang:1.26-alpine AS builder
+WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy the code into the container.
 COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
-# Set necessary environmet variables needed for our image and build the API server.
-ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-RUN go build -ldflags="-s -w" -o apiserver ./cmd/server
+FROM builder AS test
+RUN apk add --no-cache gcc musl-dev
+ENV CGO_ENABLED=1
+CMD ["go", "test", "-race", "-count=1", "./..."]
 
-FROM scratch
-
-# Copy binary and config files from /build to root folder of scratch container.
-COPY --from=builder ["/build/apiserver", "/build/.env", "/"]
-
-# Export necessary port.
-EXPOSE 5000
-
-# Command to run when starting the container.
-ENTRYPOINT ["/apiserver"]
+FROM alpine:3.22 AS runtime
+RUN apk add --no-cache ca-certificates tzdata && addgroup -S api && adduser -S -G api api
+WORKDIR /app
+COPY --from=builder /out/server /out/migrate ./
+USER api
+EXPOSE 8080
+CMD ["/app/server"]
